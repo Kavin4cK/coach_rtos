@@ -12,6 +12,11 @@ extern void usb_serial_close(void);
 extern void usb_start_listener(void);
 extern void usb_stop_listener(void);
 
+extern int network_init(void);
+extern void network_start_listener(void);
+extern void network_stop_listener(void);
+extern void network_close(void);
+
 static volatile bool running = true;
 
 void signal_handler(int signum) {
@@ -38,6 +43,7 @@ void print_help(void) {
     printf("\nOptions:\n");
     printf("  -h, --help              Show this help message\n");
     printf("  -d, --device <device>   USB serial device (default: stdin)\n");
+    printf("  -n, --network           Enable network mode (TCP port 5000)\n");
     printf("  -f, --framebuffer       Use framebuffer display\n");
     printf("  -t, --terminal          Use terminal display (default)\n");
     printf("\nCommands (via USB/stdin):\n");
@@ -59,6 +65,7 @@ void print_help(void) {
 int main(int argc, char *argv[]) {
     const char *serial_device = NULL;
     DisplayMode display_mode = DISPLAY_MODE_TERMINAL;
+    bool use_network = false;
     
     // Parse command line arguments
     for (int i = 1; i < argc; i++) {
@@ -72,6 +79,8 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "Error: --device requires an argument\n");
                 return 1;
             }
+        } else if (strcmp(argv[i], "-n") == 0 || strcmp(argv[i], "--network") == 0) {
+            use_network = true;
         } else if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--framebuffer") == 0) {
             display_mode = DISPLAY_MODE_FRAMEBUFFER;
         } else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--terminal") == 0) {
@@ -100,11 +109,20 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    // Initialize USB serial communication
-    if (serial_device) {
-        usb_serial_init(serial_device);
+    // Initialize communication (USB or Network)
+    if (use_network) {
+        printf("[MAIN] Starting network mode on port 5000...\n");
+        if (network_init() < 0) {
+            fprintf(stderr, "[MAIN] Failed to initialize network\n");
+            return 1;
+        }
     } else {
-        usb_serial_init("/dev/ttyUSB0"); // Default, will fallback to stdin
+        printf("[MAIN] Starting USB serial mode...\n");
+        if (serial_device) {
+            usb_serial_init(serial_device);
+        } else {
+            usb_serial_init("/dev/ttyUSB0"); // Default, will fallback to stdin
+        }
     }
     
     // Initialize scheduler
@@ -179,10 +197,14 @@ int main(int argc, char *argv[]) {
     scheduler_add_task(task_display);
     scheduler_add_task(task_log);
     
-    printf("\n[MAIN] Starting scheduler and USB listener...\n");
+    printf("\n[MAIN] Starting scheduler and listener...\n");
     
-    // Start USB listener
-    usb_start_listener();
+    // Start listener (USB or Network)
+    if (use_network) {
+        network_start_listener();
+    } else {
+        usb_start_listener();
+    }
     
     // Start scheduler (creates threads for all tasks)
     scheduler_start();
@@ -206,10 +228,15 @@ int main(int argc, char *argv[]) {
     // Cleanup
     printf("\n[MAIN] Shutting down system...\n");
     
-    usb_stop_listener();
+    if (use_network) {
+        network_stop_listener();
+        network_close();
+    } else {
+        usb_stop_listener();
+        usb_serial_close();
+    }
     scheduler_stop();
     display_cleanup();
-    usb_serial_close();
     
     printf("[MAIN] System shutdown complete\n");
     
