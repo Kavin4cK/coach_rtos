@@ -1,247 +1,226 @@
 #include "display.h"
+#include "tasks.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 #include <linux/fb.h>
 
-// Framebuffer variables
-static int fb_fd = -1;
-static uint16_t* fb_ptr = NULL;
-static size_t fb_size = 0;
-static struct fb_var_screeninfo vinfo;
-static struct fb_fix_screeninfo finfo;
-static bool use_terminal_only = false;
+DisplayContext g_display;
 
-// Initialize display (framebuffer or terminal)
-int display_init() {
-    // Try to open framebuffer
-    fb_fd = open("/dev/fb0", O_RDWR);
+bool display_init(DisplayMode mode) {
+    g_display.mode = mode;
+    g_display.initialized = false;
     
-    if (fb_fd < 0) {
-        log_message("Cannot open framebuffer, using terminal mode only");
-        use_terminal_only = true;
-        return 0;
+    if (mode == DISPLAY_MODE_FRAMEBUFFER) {
+        g_display.fb_fd = open("/dev/fb0", O_RDWR);
+        if (g_display.fb_fd < 0) {
+            fprintf(stderr, "[DISPLAY] Failed to open framebuffer, falling back to terminal\n");
+            g_display.mode = DISPLAY_MODE_TERMINAL;
+            g_display.initialized = true;
+            return true;
+        }
+        
+        struct fb_var_screeninfo vinfo;
+        struct fb_fix_screeninfo finfo;
+        
+        if (ioctl(g_display.fb_fd, FBIOGET_VSCREENINFO, &vinfo) < 0) {
+            fprintf(stderr, "[DISPLAY] Failed to get variable screen info\n");
+            close(g_display.fb_fd);
+            g_display.mode = DISPLAY_MODE_TERMINAL;
+            g_display.initialized = true;
+            return true;
+        }
+        
+        if (ioctl(g_display.fb_fd, FBIOGET_FSCREENINFO, &finfo) < 0) {
+            fprintf(stderr, "[DISPLAY] Failed to get fixed screen info\n");
+            close(g_display.fb_fd);
+            g_display.mode = DISPLAY_MODE_TERMINAL;
+            g_display.initialized = true;
+            return true;
+        }
+        
+        g_display.fb_size = vinfo.yres_virtual * finfo.line_length;
+        
+        g_display.fb_ptr = (uint16_t*)mmap(0, g_display.fb_size,
+                                           PROT_READ | PROT_WRITE,
+                                           MAP_SHARED, g_display.fb_fd, 0);
+        
+        if (g_display.fb_ptr == MAP_FAILED) {
+            fprintf(stderr, "[DISPLAY] Failed to mmap framebuffer\n");
+            close(g_display.fb_fd);
+            g_display.mode = DISPLAY_MODE_TERMINAL;
+            g_display.initialized = true;
+            return true;
+        }
+        
+        printf("[DISPLAY] Framebuffer initialized (%dx%d)\n", 
+               vinfo.xres, vinfo.yres);
+        display_clear(COLOR_BLACK);
+    } else {
+        printf("[DISPLAY] Terminal mode initialized\n");
     }
     
-    // Get screen info
-    if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo) < 0) {
-        log_message("Error reading framebuffer info");
-        close(fb_fd);
-        fb_fd = -1;
-        use_terminal_only = true;
-        return -1;
-    }
-    
-    if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) < 0) {
-        log_message("Error reading fixed framebuffer info");
-        close(fb_fd);
-        fb_fd = -1;
-        use_terminal_only = true;
-        return -1;
-    }
-    
-    // Map framebuffer to memory
-    fb_size = vinfo.yres_virtual * finfo.line_length;
-    fb_ptr = (uint16_t*)mmap(0, fb_size, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, 0);
-    
-    if (fb_ptr == MAP_FAILED) {
-        log_message("Error mapping framebuffer");
-        close(fb_fd);
-        fb_fd = -1;
-        use_terminal_only = true;
-        return -1;
-    }
-    
-    log_message("Framebuffer initialized: %dx%d, %d bpp", 
-                vinfo.xres, vinfo.yres, vinfo.bits_per_pixel);
-    
-    display_clear();
-    return 0;
+    g_display.initialized = true;
+    return true;
 }
 
-// Cleanup display
-void display_cleanup() {
-    if (fb_ptr && fb_ptr != MAP_FAILED) {
-        munmap(fb_ptr, fb_size);
+void display_cleanup(void) {
+    if (g_display.mode == DISPLAY_MODE_FRAMEBUFFER && g_display.fb_ptr) {
+        munmap(g_display.fb_ptr, g_display.fb_size);
+        close(g_display.fb_fd);
     }
-    
-    if (fb_fd >= 0) {
-        close(fb_fd);
-    }
-    
-    log_message("Display cleaned up");
+    printf("[DISPLAY] Cleaned up\n");
 }
 
-// Clear display
-void display_clear() {
-    if (use_terminal_only || !fb_ptr) return;
+void display_clear(uint16_t color) {
+    if (g_display.mode != DISPLAY_MODE_FRAMEBUFFER || !g_display.fb_ptr) {
+        return;
+    }
     
-    memset(fb_ptr, 0, fb_size);
+    for (uint32_t i = 0; i < DISPLAY_WIDTH * DISPLAY_HEIGHT; i++) {
+        g_display.fb_ptr[i] = color;
+    }
 }
 
-// Draw a filled rectangle
-// Replaced the draw_rect function in src/display.c with this version:
+void display_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
+    if (g_display.mode != DISPLAY_MODE_FRAMEBUFFER || !g_display.fb_ptr) {
+        return;
+    }
+    
+    for (uint16_t dy = 0; dy < h; dy++) {
+        for (uint16_t dx = 0; dx < w; dx++) {
+            uint16_t px = x + dx;
+            uint16_t py = y + dy;
+            if (px < DISPLAY_WIDTH && py < DISPLAY_HEIGHT) {
+                g_display.fb_ptr[py * DISPLAY_WIDTH + px] = color;
+            }
+        }
+    }
+}
 
-void draw_rect(int x, int y, int w, int h, uint16_t color) {
-    if (!fbp) return;
+void display_draw_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
+    if (g_display.mode != DISPLAY_MODE_FRAMEBUFFER || !g_display.fb_ptr) {
+        return;
+    }
     
     // Top and bottom horizontal lines
-    for (int i = x; i < x + w && i < (int)vinfo.xres; i++) {
-        if (y >= 0 && y < (int)vinfo.yres) {
-            long location = (i + vinfo.xoffset) + (y + vinfo.yoffset) * finfo.line_length / 2;
-            *((uint16_t*)(fbp + location * 2)) = color;
-        }
-        if ((y + h - 1) >= 0 && (y + h - 1) < (int)vinfo.yres) {
-            long location = (i + vinfo.xoffset) + (y + h - 1 + vinfo.yoffset) * finfo.line_length / 2;
-            *((uint16_t*)(fbp + location * 2)) = color;
+    for (uint16_t i = 0; i < w; i++) {
+        if (x + i < DISPLAY_WIDTH) {
+            if (y < DISPLAY_HEIGHT)
+                g_display.fb_ptr[y * DISPLAY_WIDTH + x + i] = color;
+            if (y + h - 1 < DISPLAY_HEIGHT)
+                g_display.fb_ptr[(y + h - 1) * DISPLAY_WIDTH + x + i] = color;
         }
     }
     
     // Left and right vertical lines
-    for (int j = y; j < y + h && j < (int)vinfo.yres; j++) {
-        if (x >= 0 && x < (int)vinfo.xres) {
-            long location = (x + vinfo.xoffset) + (j + vinfo.yoffset) * finfo.line_length / 2;
-            *((uint16_t*)(fbp + location * 2)) = color;
-        }
-        if ((x + w - 1) >= 0 && (x + w - 1) < (int)vinfo.xres) {
-            long location = (x + w - 1 + vinfo.xoffset) + (j + vinfo.yoffset) * finfo.line_length / 2;
-            *((uint16_t*)(fbp + location * 2)) = color;
+    for (uint16_t i = 0; i < h; i++) {
+        if (y + i < DISPLAY_HEIGHT) {
+            if (x < DISPLAY_WIDTH)
+                g_display.fb_ptr[(y + i) * DISPLAY_WIDTH + x] = color;
+            if (x + w - 1 < DISPLAY_WIDTH)
+                g_display.fb_ptr[(y + i) * DISPLAY_WIDTH + x + w - 1] = color;
         }
     }
 }
-// Get color for cabin state
-static uint16_t get_cabin_color(CabinState state) {
-    switch (state) {
-        case STATE_NORMAL: return COLOR_GREEN;
-        case STATE_LIGHT_ON: return COLOR_BLUE;
-        case STATE_TEMP_ADJUST: return COLOR_YELLOW;
-        case STATE_EMERGENCY: return COLOR_RED;
-        case STATE_FIRE: return COLOR_ORANGE;
-        default: return COLOR_WHITE;
-    }
-}
 
-// Display header
-void display_header() {
-    if (use_terminal_only) return;
-    
-    draw_rect(0, 0, DISPLAY_WIDTH, 40, COLOR_BLUE);
-}
-
-// Display a single cabin
-void display_cabin(int cabin_id) {
-    if (use_terminal_only || cabin_id < 0 || cabin_id >= NUM_CABINS) return;
-    
-    int x = 10 + (cabin_id % 5) * (CABIN_WIDTH + 10);
-    int y = 60 + (cabin_id / 5) * (CABIN_HEIGHT + 15);
-    
-    pthread_mutex_lock(&g_system.cabins[cabin_id].mutex);
-    uint16_t color = get_cabin_color(g_system.cabins[cabin_id].state);
-    pthread_mutex_unlock(&g_system.cabins[cabin_id].mutex);
-    
-    draw_rect(x, y, CABIN_WIDTH, CABIN_HEIGHT, color);
-    draw_rect(x + 2, y + 2, CABIN_WIDTH - 4, CABIN_HEIGHT - 4, COLOR_BLACK);
-    draw_rect(x + 4, y + 4, CABIN_WIDTH - 8, CABIN_HEIGHT - 8, color);
-}
-
-// Update entire display
-void display_update() {
-    if (use_terminal_only) {
-        terminal_display_system_state();
+void display_update_coach_layout(void) {
+    if (g_display.mode != DISPLAY_MODE_FRAMEBUFFER) {
         return;
     }
     
-    display_clear();
-    display_header();
+    display_clear(COLOR_BLACK);
+    
+    // Draw title area
+    display_fill_rect(0, 0, DISPLAY_WIDTH, 30, COLOR_GRAY);
+    
+    // Draw cabins (2 rows of 5)
+    uint16_t cabin_width = 80;
+    uint16_t cabin_height = 100;
+    uint16_t margin = 10;
+    uint16_t start_y = 50;
+    
+    system_state_lock();
     
     for (int i = 0; i < NUM_CABINS; i++) {
-        display_cabin(i);
-    }
-}
-
-// Display status message
-void display_status_message(const char* message) {
-    log_message("STATUS: %s", message);
-    
-    if (!use_terminal_only) {
-        // Draw message area at bottom
-        draw_rect(0, DISPLAY_HEIGHT - 40, DISPLAY_WIDTH, 40, COLOR_RED);
-    }
-}
-
-// Terminal-based display update
-void display_terminal_update() {
-    // Just log, don't flood terminal
-    static int update_count = 0;
-    update_count++;
-    
-    if (update_count % 10 == 0) {
-        // Periodic summary
-        terminal_display_system_state();
-    }
-}
-
-// Terminal display system state
-void terminal_display_system_state() {
-    printf("\n");
-    printf("╔══════════════════════════════════════════════════════════════╗\n");
-    printf("║           COACH SYSTEM STATUS - TERMINAL VIEW                ║\n");
-    printf("╚══════════════════════════════════════════════════════════════╝\n");
-    
-    pthread_mutex_lock(&g_system.system_mutex);
-    
-    printf("\nSystem Flags:\n");
-    printf("  Emergency Active: %s\n", g_system.emergency_active ? "YES" : "NO");
-    printf("  Fire Active:      %s\n", g_system.fire_active ? "YES" : "NO");
-    printf("  Power Low:        %s\n", g_system.power_low ? "YES" : "NO");
-    
-    printf("\nCabin Status:\n");
-    printf("┌──────┬────────┬──────────┬─────────────┐\n");
-    printf("│ Cabin│ Light  │ Temp(°C) │   State     │\n");
-    printf("├──────┼────────┼──────────┼─────────────┤\n");
-    
-    for (int i = 0; i < NUM_CABINS; i++) {
-        const char* state_str;
-        const char* state_icon;
+        int row = i / 5;
+        int col = i % 5;
         
-        switch (g_system.cabins[i].state) {
-            case STATE_NORMAL:
-                state_str = "Normal";
-                state_icon = "✓";
-                break;
-            case STATE_LIGHT_ON:
-                state_str = "Light On";
-                state_icon = "💡";
-                break;
-            case STATE_TEMP_ADJUST:
-                state_str = "Temp Adj";
-                state_icon = "🌡";
-                break;
-            case STATE_EMERGENCY:
-                state_str = "EMERGENCY";
-                state_icon = "⚠";
-                break;
-            case STATE_FIRE:
-                state_str = "FIRE";
-                state_icon = "🔥";
-                break;
-            default:
-                state_str = "Unknown";
-                state_icon = "?";
-                break;
+        uint16_t x = margin + col * (cabin_width + margin);
+        uint16_t y = start_y + row * (cabin_height + margin);
+        
+        // Determine cabin color based on state
+        uint16_t color = COLOR_GREEN; // Normal
+        
+        if (g_system_state.cabins[i].fire_active) {
+            color = COLOR_ORANGE;
+        } else if (g_system_state.cabins[i].emergency_active) {
+            color = COLOR_RED;
+        } else if (g_system_state.cabins[i].temperature > 26 || 
+                   g_system_state.cabins[i].temperature < 18) {
+            color = COLOR_YELLOW;
+        } else if (g_system_state.cabins[i].light_on) {
+            color = COLOR_BLUE;
         }
         
-        printf("│  %2d  │  %3s   │   %3d    │ %s %-10s │\n",
-               i,
-               g_system.cabins[i].light_on ? "ON" : "OFF",
-               g_system.cabins[i].temperature,
-               state_icon,
-               state_str);
+        display_fill_rect(x, y, cabin_width, cabin_height, color);
+        display_draw_rect(x, y, cabin_width, cabin_height, COLOR_WHITE);
     }
     
-    printf("└──────┴────────┴──────────┴─────────────┘\n");
+    system_state_unlock();
+}
+
+void display_show_emergency(const char *message) {
+    if (g_display.mode == DISPLAY_MODE_FRAMEBUFFER) {
+        // Flash red bar at top
+        display_fill_rect(0, 0, DISPLAY_WIDTH, 40, COLOR_RED);
+    }
     
-    pthread_mutex_unlock(&g_system.system_mutex);
+    printf("\n*** %s ***\n", message);
+}
+
+void display_terminal_coach_status(void) {
+    static int update_counter = 0;
+    
+    if (update_counter++ % 5 != 0) {
+        return; // Update every 5th call
+    }
     
     printf("\n");
+    printf("╔════════════════════════════════════════════════════════════╗\n");
+    printf("║         INDIAN RAILWAYS - COACH STATUS DISPLAY            ║\n");
+    printf("╠════════════════════════════════════════════════════════════╣\n");
+    
+    system_state_lock();
+    
+    for (int i = 0; i < NUM_CABINS; i++) {
+        char status[50];
+        
+        if (g_system_state.cabins[i].fire_active) {
+            snprintf(status, sizeof(status), "FIRE ALERT");
+        } else if (g_system_state.cabins[i].emergency_active) {
+            snprintf(status, sizeof(status), "EMERGENCY");
+        } else if (g_system_state.cabins[i].light_on) {
+            snprintf(status, sizeof(status), "Light ON, %d°C", 
+                    g_system_state.cabins[i].temperature);
+        } else {
+            snprintf(status, sizeof(status), "Normal, %d°C", 
+                    g_system_state.cabins[i].temperature);
+        }
+        
+        printf("║  Cabin %d: %-45s║\n", i, status);
+    }
+    
+    printf("╠════════════════════════════════════════════════════════════╣\n");
+    printf("║  Power: %-10s  Emergency: %-8s  Chain: %-8s║\n",
+           g_system_state.power_low ? "LOW" : "NORMAL",
+           g_system_state.system_emergency ? "ACTIVE" : "INACTIVE",
+           g_system_state.chain_pulled ? "PULLED" : "NORMAL");
+    printf("╚════════════════════════════════════════════════════════════╝\n");
+    
+    system_state_unlock();
 }
