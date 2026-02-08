@@ -219,6 +219,20 @@ void parse_and_execute_command(char *cmd, int port_id) {
             usb_send_response(port_id, "ERROR: Use PULL");
         }
         
+    } else if (strcmp(command, "CLEAR") == 0) {
+        if (strcmp(arg1, "ALL") == 0) {
+            system_clear_all_emergencies();
+            usb_send_response(port_id, "OK: All emergencies cleared");
+        } else {
+            int cabin_id = atoi(arg1);
+            if (cabin_id >= 0 && cabin_id < NUM_CABINS) {
+                cabin_clear_emergency(cabin_id);
+                usb_send_response(port_id, "OK: Emergency cleared");
+            } else {
+                usb_send_response(port_id, "ERROR: Invalid cabin ID");
+            }
+        }
+        
     } else {
         usb_send_response(port_id, "ERROR: Unknown command");
     }

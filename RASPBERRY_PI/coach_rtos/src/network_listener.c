@@ -138,6 +138,24 @@ void network_parse_command(const char *cmd_str, int client_id) {
             network_send_response(client_id, "ERROR: Use PULL");
         }
     }
+    else if (strcmp(token, "CLEAR") == 0) {
+        char *target = strtok(NULL, " ");
+        
+        if (target && strcmp(target, "ALL") == 0) {
+            system_clear_all_emergencies();
+            network_send_response(client_id, "OK: All emergencies cleared");
+        } else if (target) {
+            int cabin_id = atoi(target);
+            if (cabin_id >= 0 && cabin_id < NUM_CABINS) {
+                cabin_clear_emergency(cabin_id);
+                network_send_response(client_id, "OK: Emergency cleared");
+            } else {
+                network_send_response(client_id, "ERROR: Invalid cabin ID");
+            }
+        } else {
+            network_send_response(client_id, "ERROR: Use CLEAR ALL or CLEAR <cabin_id>");
+        }
+    }
     else {
         network_send_response(client_id, "ERROR: Unknown command");
     }

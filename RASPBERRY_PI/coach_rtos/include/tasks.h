@@ -21,5 +21,7 @@ void cabin_set_emergency(uint8_t cabin_id, bool active);
 void cabin_set_fire(uint8_t cabin_id, bool active);
 void system_set_power_low(bool low);
 void system_set_chain_pull(bool pulled);
+void system_clear_all_emergencies(void);
+void cabin_clear_emergency(uint8_t cabin_id);
 
 #endif // TASKS_H

@@ -53,11 +53,15 @@ void print_help(void) {
     printf("  FIRE <cabin_id>                Trigger fire alert\n");
     printf("  POWER LOW|NORMAL               Set power status\n");
     printf("  CHAIN PULL                     Simulate chain pull\n");
+    printf("  CLEAR <cabin_id>               Clear emergency in specific cabin\n");
+    printf("  CLEAR ALL                      Clear all emergencies system-wide\n");
     printf("\nExamples:\n");
     printf("  LIGHT 3 ON\n");
     printf("  TEMP 5 24\n");
     printf("  EMERGENCY 2\n");
     printf("  FIRE 7\n");
+    printf("  CLEAR 2\n");
+    printf("  CLEAR ALL\n");
     printf("  POWER LOW\n");
     printf("\n");
 }

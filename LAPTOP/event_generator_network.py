@@ -97,6 +97,14 @@ class CoachEventGenerator:
     def pull_chain(self):
         """Simulate chain pull"""
         self.controller.send_command("CHAIN PULL")
+    
+    def clear_emergency(self, cabin_id):
+        """Clear emergency for specific cabin"""
+        self.controller.send_command(f"CLEAR {cabin_id}")
+    
+    def clear_all_emergencies(self):
+        """Clear all emergencies system-wide"""
+        self.controller.send_command("CLEAR ALL")
 
 
 class NetworkGUI:
@@ -173,6 +181,10 @@ class NetworkGUI:
             Button(cabin_box, text="🔥 Fire",
                    command=lambda x=i: self.trigger_fire(x),
                    bg='#e67e22', fg='white', width=10).pack(pady=1)
+            
+            Button(cabin_box, text="✓ Clear",
+                   command=lambda x=i: self.clear_emergency(x),
+                   bg='#27ae60', fg='white', width=10).pack(pady=1)
         
         # System controls
         system_frame = Frame(main_frame, bg='#34495e')
@@ -196,6 +208,15 @@ class NetworkGUI:
         Button(btn_frame, text="⛓️ Pull Chain",
                command=lambda: self.generator.pull_chain(),
                bg='#c0392b', fg='white', width=15, height=2).pack(side=LEFT, padx=5)
+        
+        # Emergency Clear Button
+        btn_frame2 = Frame(system_frame, bg='#34495e')
+        btn_frame2.pack(pady=5)
+        
+        Button(btn_frame2, text="🔄 CLEAR ALL EMERGENCIES",
+               command=lambda: self.clear_all_emergencies(),
+               bg='#16a085', fg='white', width=45, height=2,
+               font=('Arial', 11, 'bold')).pack()
     
     def toggle_light(self, cabin_id):
         self.generator.toggle_light(cabin_id)
@@ -212,6 +233,14 @@ class NetworkGUI:
     def trigger_fire(self, cabin_id):
         self.generator.trigger_fire(cabin_id)
         messagebox.showerror("Fire", f"Fire alert in Cabin {cabin_id}")
+    
+    def clear_emergency(self, cabin_id):
+        self.generator.clear_emergency(cabin_id)
+        messagebox.showinfo("Cleared", f"Emergency cleared in Cabin {cabin_id}")
+    
+    def clear_all_emergencies(self):
+        self.generator.clear_all_emergencies()
+        messagebox.showinfo("System Reset", "All emergencies have been cleared!\nSystem returned to normal.")
     
     def run(self):
         self.root.mainloop()

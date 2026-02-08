@@ -174,6 +174,41 @@ void system_set_chain_pull(bool pulled) {
     }
 }
 
+void cabin_clear_emergency(uint8_t cabin_id) {
+    if (cabin_id >= NUM_CABINS) {
+        log_message("ERROR: Invalid cabin ID %d", cabin_id);
+        return;
+    }
+
+    pthread_mutex_lock(&g_system.cabins[cabin_id].mutex);
+    if (g_system.cabins[cabin_id].state == STATE_EMERGENCY || 
+        g_system.cabins[cabin_id].state == STATE_FIRE) {
+        g_system.cabins[cabin_id].state = STATE_NORMAL;
+        log_message("Cabin %d: Emergency cleared", cabin_id);
+    }
+    pthread_mutex_unlock(&g_system.cabins[cabin_id].mutex);
+}
+
+void system_clear_all_emergencies(void) {
+    pthread_mutex_lock(&g_system.system_mutex);
+    g_system.emergency_active = false;
+    g_system.fire_active = false;
+    pthread_mutex_unlock(&g_system.system_mutex);
+
+    // Clear all cabin emergency states
+    for (int i = 0; i < NUM_CABINS; i++) {
+        pthread_mutex_lock(&g_system.cabins[i].mutex);
+        if (g_system.cabins[i].state == STATE_EMERGENCY || 
+            g_system.cabins[i].state == STATE_FIRE) {
+            g_system.cabins[i].state = STATE_NORMAL;
+        }
+        pthread_mutex_unlock(&g_system.cabins[i].mutex);
+    }
+
+    log_message("ALL EMERGENCIES CLEARED - System returned to normal");
+    pthread_cond_broadcast(&g_system.task_ready_cond);
+}
+
 // ==================== TASK IMPLEMENTATIONS ====================
 
 // Fire Emergency Task (Priority 10)

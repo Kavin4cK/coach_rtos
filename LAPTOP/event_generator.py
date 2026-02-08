@@ -186,6 +186,14 @@ class CoachEventGenerator:
         """Simulate chain pull via specific USB port"""
         self.usb.send_command(usb_port, "CHAIN PULL")
     
+    def clear_emergency(self, cabin_id, usb_port=0):
+        """Clear emergency for specific cabin via specific USB port"""
+        self.usb.send_command(usb_port, f"CLEAR {cabin_id}")
+    
+    def clear_all_emergencies(self, usb_port=0):
+        """Clear all emergencies via specific USB port"""
+        self.usb.send_command(usb_port, "CLEAR ALL")
+    
     def send_concurrent_scenario(self, scenario_name):
         """Send pre-defined concurrent test scenarios"""
         scenarios = {
@@ -314,6 +322,10 @@ class MultiUSBGUI:
             Button(cabin_box, text="🔥",
                    command=lambda x=i: self.trigger_fire(x),
                    bg='#e67e22', fg='white', width=8).pack(pady=1)
+            
+            Button(cabin_box, text="✓",
+                   command=lambda x=i: self.clear_emergency(x),
+                   bg='#27ae60', fg='white', width=8).pack(pady=1)
         
         # Concurrent scenario buttons
         concurrent_frame = Frame(main_frame, bg='#34495e')
@@ -357,6 +369,15 @@ class MultiUSBGUI:
         Button(system_frame, text="⛓️ Pull Chain",
                command=lambda: self.generator.pull_chain(self.selected_usb.get()),
                bg='#c0392b', fg='white', width=12, height=2).pack(side=LEFT, padx=5)
+        
+        # Clear All Emergency Button
+        clear_frame = Frame(main_frame, bg='#34495e')
+        clear_frame.pack(pady=5)
+        
+        Button(clear_frame, text="🔄 CLEAR ALL EMERGENCIES",
+               command=lambda: self.clear_all_emergencies(),
+               bg='#16a085', fg='white', width=50, height=2,
+               font=('Arial', 10, 'bold')).pack()
     
     def toggle_light(self, cabin_id):
         self.generator.toggle_light(cabin_id, self.selected_usb.get())
@@ -373,6 +394,14 @@ class MultiUSBGUI:
     def trigger_fire(self, cabin_id):
         self.generator.trigger_fire(cabin_id, self.selected_usb.get())
         messagebox.showerror("Fire", f"Fire in Cabin {cabin_id} via USB{self.selected_usb.get()}")
+    
+    def clear_emergency(self, cabin_id):
+        self.generator.clear_emergency(cabin_id, self.selected_usb.get())
+        messagebox.showinfo("Cleared", f"Emergency cleared in Cabin {cabin_id}")
+    
+    def clear_all_emergencies(self):
+        self.generator.clear_all_emergencies(self.selected_usb.get())
+        messagebox.showinfo("System Reset", "All emergencies have been cleared!\nSystem returned to normal.")
     
     def run(self):
         self.root.mainloop()
