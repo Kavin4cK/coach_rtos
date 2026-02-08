@@ -1,195 +1,217 @@
-#include "common.h"
 #include "scheduler.h"
 #include "tasks.h"
 #include "display.h"
+#include <stdio.h>
+#include <stdlib.h>
 #include <signal.h>
-#include <stdarg.h>
+#include <unistd.h>
+#include <string.h>
 
-// Global System State Definition
-SystemState g_system;
+extern int usb_serial_init(const char *device);
+extern void usb_serial_close(void);
+extern void usb_start_listener(void);
+extern void usb_stop_listener(void);
 
-// Signal handler for graceful shutdown
-void signal_handler(int sig) {
-    if (sig == SIGINT || sig == SIGTERM) {
-        log_message("Received shutdown signal, stopping system...");
-        g_system.system_running = false;
-    }
+static volatile bool running = true;
+
+void signal_handler(int signum) {
+    (void)signum; // Suppress unused parameter warning
+    printf("\n[MAIN] Received signal, shutting down...\n");
+    running = false;
 }
 
-// Initialize system state
-void system_init() {
-    pthread_mutex_init(&g_system.system_mutex, NULL);
-    pthread_cond_init(&g_system.task_ready_cond, NULL);
-    
-    // Initialize cabins
-    for (int i = 0; i < NUM_CABINS; i++) {
-        g_system.cabins[i].id = i;
-        g_system.cabins[i].light_on = false;
-        g_system.cabins[i].temperature = 24; // Default 24°C
-        g_system.cabins[i].state = STATE_NORMAL;
-        pthread_mutex_init(&g_system.cabins[i].mutex, NULL);
-    }
-    
-    g_system.num_tasks = 0;
-    g_system.system_running = true;
-    g_system.power_low = false;
-    g_system.emergency_active = false;
-    g_system.fire_active = false;
-    
-    log_message("System initialized with %d cabins", NUM_CABINS);
-}
-
-// Cleanup system resources
-void system_cleanup() {
-    log_message("Cleaning up system resources...");
-    
-    pthread_mutex_destroy(&g_system.system_mutex);
-    pthread_cond_destroy(&g_system.task_ready_cond);
-    
-    for (int i = 0; i < NUM_CABINS; i++) {
-        pthread_mutex_destroy(&g_system.cabins[i].mutex);
-    }
-    
-    display_cleanup();
-}
-
-// Utility: Get timestamp
-void get_timestamp(char* buffer, size_t size) {
-    time_t now = time(NULL);
-    struct tm* t = localtime(&now);
-    strftime(buffer, size, "%H:%M:%S", t);
-}
-
-// Utility: Log message
-void log_message(const char* format, ...) {
-    char timestamp[32];
-    get_timestamp(timestamp, sizeof(timestamp));
-    
-    printf("[%s] ", timestamp);
-    
-    va_list args;
-    va_start(args, format);
-    vprintf(format, args);
-    va_end(args);
-    
+void print_banner(void) {
     printf("\n");
-    fflush(stdout);
+    printf("╔═══════════════════════════════════════════════════════════╗\n");
+    printf("║                                                           ║\n");
+    printf("║       INDIAN RAILWAYS - RTOS COACH CONTROL SYSTEM         ║\n");
+    printf("║                                                           ║\n");
+    printf("║  Real-Time Operating System Simulation Project           ║\n");
+    printf("║  Priority-Based Task Scheduling & Emergency Management   ║\n");
+    printf("║                                                           ║\n");
+    printf("╚═══════════════════════════════════════════════════════════╝\n");
+    printf("\n");
 }
 
-// USB listener thread (reads from stdin)
-void* usb_listener_thread(void* arg) {
-    char buffer[256];
+void print_help(void) {
+    printf("Usage: coach_rtos [options]\n");
+    printf("\nOptions:\n");
+    printf("  -h, --help              Show this help message\n");
+    printf("  -d, --device <device>   USB serial device (default: stdin)\n");
+    printf("  -f, --framebuffer       Use framebuffer display\n");
+    printf("  -t, --terminal          Use terminal display (default)\n");
+    printf("\nCommands (via USB/stdin):\n");
+    printf("  LIGHT <cabin_id> ON|OFF        Control cabin lighting\n");
+    printf("  TEMP <cabin_id> <value>        Set cabin temperature (10-35°C)\n");
+    printf("  EMERGENCY <cabin_id>           Trigger passenger emergency\n");
+    printf("  FIRE <cabin_id>                Trigger fire alert\n");
+    printf("  POWER LOW|NORMAL               Set power status\n");
+    printf("  CHAIN PULL                     Simulate chain pull\n");
+    printf("\nExamples:\n");
+    printf("  LIGHT 3 ON\n");
+    printf("  TEMP 5 24\n");
+    printf("  EMERGENCY 2\n");
+    printf("  FIRE 7\n");
+    printf("  POWER LOW\n");
+    printf("\n");
+}
+
+int main(int argc, char *argv[]) {
+    const char *serial_device = NULL;
+    DisplayMode display_mode = DISPLAY_MODE_TERMINAL;
     
-    log_message("USB listener started");
-    
-    while (g_system.system_running) {
-        if (fgets(buffer, sizeof(buffer), stdin) != NULL) {
-            // Remove newline
-            buffer[strcspn(buffer, "\n")] = 0;
-            
-            if (strlen(buffer) == 0) continue;
-            
-            log_message("Received command: %s", buffer);
-            
-            // Parse command
-            char cmd[32], param1[32], param2[32];
-            int n = sscanf(buffer, "%s %s %s", cmd, param1, param2);
-            
-            if (n >= 2) {
-                if (strcmp(cmd, "LIGHT") == 0) {
-                    int cabin_id = atoi(param1);
-                    if (cabin_id >= 0 && cabin_id < NUM_CABINS) {
-                        bool on = (n >= 3 && strcmp(param2, "ON") == 0);
-                        control_light(cabin_id, on);
-                    }
-                }
-                else if (strcmp(cmd, "TEMP") == 0) {
-                    int cabin_id = atoi(param1);
-                    int temp = atoi(param2);
-                    if (cabin_id >= 0 && cabin_id < NUM_CABINS) {
-                        adjust_temperature(cabin_id, temp);
-                    }
-                }
-                else if (strcmp(cmd, "EMERGENCY") == 0) {
-                    int cabin_id = atoi(param1);
-                    if (cabin_id >= 0 && cabin_id < NUM_CABINS) {
-                        handle_emergency(cabin_id);
-                    }
-                }
-                else if (strcmp(cmd, "FIRE") == 0) {
-                    int cabin_id = atoi(param1);
-                    if (cabin_id >= 0 && cabin_id < NUM_CABINS) {
-                        handle_fire_alert(cabin_id);
-                    }
-                }
-                else if (strcmp(cmd, "POWER") == 0) {
-                    if (strcmp(param1, "LOW") == 0) {
-                        handle_power_low();
-                    }
-                }
-                else if (strcmp(cmd, "CHAIN") == 0) {
-                    handle_chain_pull();
-                }
-                else if (strcmp(cmd, "STATUS") == 0) {
-                    scheduler_print_status();
-                }
+    // Parse command line arguments
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+            print_help();
+            return 0;
+        } else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--device") == 0) {
+            if (i + 1 < argc) {
+                serial_device = argv[++i];
+            } else {
+                fprintf(stderr, "Error: --device requires an argument\n");
+                return 1;
             }
+        } else if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--framebuffer") == 0) {
+            display_mode = DISPLAY_MODE_FRAMEBUFFER;
+        } else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--terminal") == 0) {
+            display_mode = DISPLAY_MODE_TERMINAL;
+        } else {
+            fprintf(stderr, "Unknown option: %s\n", argv[i]);
+            print_help();
+            return 1;
         }
-        usleep(50000); // 50ms
     }
-    
-    log_message("USB listener stopped");
-    return NULL;
-}
-
-int main(int argc, char* argv[]) {
-    printf("=================================================\n");
-    printf("  RTOS Coach Subsystem Control Simulation\n");
-    printf("  Indian Railways LHB Coach Management System\n");
-    printf("=================================================\n\n");
     
     // Setup signal handlers
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
     
-    // Initialize system
-    system_init();
+    print_banner();
+    
+    printf("[MAIN] Initializing RTOS Coach Control System...\n");
+    
+    // Initialize system state
+    system_state_init();
     
     // Initialize display
-    if (display_init() != 0) {
-        log_message("Warning: Display initialization failed, using terminal mode");
+    if (!display_init(display_mode)) {
+        fprintf(stderr, "[MAIN] Failed to initialize display\n");
+        return 1;
+    }
+    
+    // Initialize USB serial communication
+    if (serial_device) {
+        usb_serial_init(serial_device);
+    } else {
+        usb_serial_init("/dev/ttyUSB0"); // Default, will fallback to stdin
     }
     
     // Initialize scheduler
     scheduler_init();
     
-    // Register all tasks
-    register_all_tasks();
+    // Create all tasks with their priorities
+    printf("\n[MAIN] Creating tasks...\n");
     
-    // Start USB listener thread
-    pthread_t usb_thread;
-    pthread_create(&usb_thread, NULL, usb_listener_thread, NULL);
+    Task *task_fire = scheduler_create_task(
+        "Fire Emergency Handler",
+        PRIORITY_FIRE_EMERGENCY,
+        task_fire_emergency,
+        NULL
+    );
     
-    // Start scheduler
-    log_message("Starting scheduler...");
+    Task *task_emergency = scheduler_create_task(
+        "Passenger Emergency Handler",
+        PRIORITY_PASSENGER_EMERGENCY,
+        task_passenger_emergency,
+        NULL
+    );
+    
+    Task *task_chain = scheduler_create_task(
+        "Chain Pull Handler",
+        PRIORITY_CHAIN_PULL,
+        task_chain_pull,
+        NULL
+    );
+    
+    Task *task_power = scheduler_create_task(
+        "Power Management",
+        PRIORITY_POWER_MANAGEMENT,
+        task_power_management,
+        NULL
+    );
+    
+    Task *task_temp = scheduler_create_task(
+        "Temperature Regulation",
+        PRIORITY_TEMP_REGULATION,
+        task_temperature_regulation,
+        NULL
+    );
+    
+    Task *task_light = scheduler_create_task(
+        "Lighting Control",
+        PRIORITY_LIGHTING,
+        task_lighting_control,
+        NULL
+    );
+    
+    Task *task_display = scheduler_create_task(
+        "Display Update",
+        PRIORITY_DISPLAY,
+        task_display_update,
+        NULL
+    );
+    
+    Task *task_log = scheduler_create_task(
+        "System Logging",
+        PRIORITY_LOGGING,
+        task_logging,
+        NULL
+    );
+    
+    // Add tasks to scheduler
+    scheduler_add_task(task_fire);
+    scheduler_add_task(task_emergency);
+    scheduler_add_task(task_chain);
+    scheduler_add_task(task_power);
+    scheduler_add_task(task_temp);
+    scheduler_add_task(task_light);
+    scheduler_add_task(task_display);
+    scheduler_add_task(task_log);
+    
+    printf("\n[MAIN] Starting scheduler and USB listener...\n");
+    
+    // Start USB listener
+    usb_start_listener();
+    
+    // Start scheduler (creates threads for all tasks)
     scheduler_start();
     
-    // Main loop
-    log_message("System running. Commands: LIGHT, TEMP, EMERGENCY, FIRE, POWER, CHAIN, STATUS");
+    printf("\n");
+    printf("╔═══════════════════════════════════════════════════════════╗\n");
+    printf("║  SYSTEM READY - Waiting for commands...                  ║\n");
+    printf("║  Press Ctrl+C to exit                                    ║\n");
+    printf("╚═══════════════════════════════════════════════════════════╝\n");
+    printf("\n");
     
-    while (g_system.system_running) {
+    if (!serial_device) {
+        printf("Enter commands (type 'help' for command list):\n");
+    }
+    
+    // Main loop
+    while (running) {
         sleep(1);
     }
     
     // Cleanup
-    log_message("Shutting down system...");
-    scheduler_stop();
-    pthread_join(usb_thread, NULL);
-    system_cleanup();
+    printf("\n[MAIN] Shutting down system...\n");
     
-    printf("\n=================================================\n");
-    printf("  System shutdown complete\n");
-    printf("=================================================\n");
+    usb_stop_listener();
+    scheduler_stop();
+    display_cleanup();
+    usb_serial_close();
+    
+    printf("[MAIN] System shutdown complete\n");
     
     return 0;
 }

@@ -58,6 +58,8 @@ int usb_serial_init_port(USBPort *port, const char *device, int port_id) {
 }
 
 int usb_serial_init(const char *device) {
+    (void)device; // Suppress unused parameter warning
+    
     // Initialize all 3 USB ports
     const char *devices[MAX_USB_PORTS] = {
         "/dev/ttyUSB0",
@@ -102,7 +104,8 @@ void usb_send_response(int port_id, const char *message) {
     if (usb_ports[port_id].active && usb_ports[port_id].fd >= 0) {
         char buffer[256];
         snprintf(buffer, sizeof(buffer), "[USB%d] %s\n", port_id, message);
-        write(usb_ports[port_id].fd, buffer, strlen(buffer));
+        ssize_t written = write(usb_ports[port_id].fd, buffer, strlen(buffer));
+        (void)written; // Suppress unused variable warning
     }
 }
 
@@ -149,15 +152,6 @@ void parse_and_execute_command(char *cmd, int port_id) {
             usb_send_response(port_id, "ERROR: Use ON or OFF");
         }
         
-        Task *light_task = g_scheduler.task_list;
-        while (light_task) {
-            if (light_task->priority == PRIORITY_LIGHTING) {
-                scheduler_unblock_task(light_task);
-                break;
-            }
-            light_task = light_task->next;
-        }
-        
     } else if (strcmp(command, "TEMP") == 0) {
         if (cabin_id < 0 || cabin_id >= NUM_CABINS) {
             usb_send_response(port_id, "ERROR: Invalid cabin ID");
@@ -175,15 +169,6 @@ void parse_and_execute_command(char *cmd, int port_id) {
         cabin_set_temperature(cabin_id, value);
         usb_send_response(port_id, "OK: Temperature set");
         
-        Task *temp_task = g_scheduler.task_list;
-        while (temp_task) {
-            if (temp_task->priority == PRIORITY_TEMP_REGULATION) {
-                scheduler_unblock_task(temp_task);
-                break;
-            }
-            temp_task = temp_task->next;
-        }
-        
     } else if (strcmp(command, "EMERGENCY") == 0) {
         if (cabin_id < 0 || cabin_id >= NUM_CABINS) {
             usb_send_response(port_id, "ERROR: Invalid cabin ID");
@@ -194,15 +179,8 @@ void parse_and_execute_command(char *cmd, int port_id) {
         cabin_set_emergency(cabin_id, true);
         usb_send_response(port_id, "OK: Emergency activated");
         
-        Task *emerg_task = g_scheduler.task_list;
-        while (emerg_task) {
-            if (emerg_task->priority == PRIORITY_PASSENGER_EMERGENCY) {
-                scheduler_unblock_task(emerg_task);
-                scheduler_preempt();
-                break;
-            }
-            emerg_task = emerg_task->next;
-        }
+        // Trigger preemption with emergency priority
+        scheduler_preempt(PRIORITY_PASSENGER_EMERGENCY);
         
     } else if (strcmp(command, "FIRE") == 0) {
         if (cabin_id < 0 || cabin_id >= NUM_CABINS) {
@@ -214,15 +192,8 @@ void parse_and_execute_command(char *cmd, int port_id) {
         cabin_set_fire(cabin_id, true);
         usb_send_response(port_id, "OK: Fire alert activated");
         
-        Task *fire_task = g_scheduler.task_list;
-        while (fire_task) {
-            if (fire_task->priority == PRIORITY_FIRE_EMERGENCY) {
-                scheduler_unblock_task(fire_task);
-                scheduler_preempt();
-                break;
-            }
-            fire_task = fire_task->next;
-        }
+        // Trigger preemption with fire priority (highest)
+        scheduler_preempt(PRIORITY_FIRE_EMERGENCY);
         
     } else if (strcmp(command, "POWER") == 0) {
         if (strcmp(arg1, "LOW") == 0) {
@@ -237,29 +208,13 @@ void parse_and_execute_command(char *cmd, int port_id) {
             return;
         }
         
-        Task *power_task = g_scheduler.task_list;
-        while (power_task) {
-            if (power_task->priority == PRIORITY_POWER_MANAGEMENT) {
-                scheduler_unblock_task(power_task);
-                break;
-            }
-            power_task = power_task->next;
-        }
-        
     } else if (strcmp(command, "CHAIN") == 0) {
         if (strcmp(arg1, "PULL") == 0) {
             system_set_chain_pull(true);
             usb_send_response(port_id, "OK: Chain pulled");
             
-            Task *chain_task = g_scheduler.task_list;
-            while (chain_task) {
-                if (chain_task->priority == PRIORITY_CHAIN_PULL) {
-                    scheduler_unblock_task(chain_task);
-                    scheduler_preempt();
-                    break;
-                }
-                chain_task = chain_task->next;
-            }
+            // Trigger preemption with chain pull priority
+            scheduler_preempt(PRIORITY_CHAIN_PULL);
         } else {
             usb_send_response(port_id, "ERROR: Use PULL");
         }
@@ -280,7 +235,7 @@ void* usb_listener_loop(void *arg) {
     
     while (listener_running && port->active) {
         char c;
-        int bytes_read = read(port->fd, &c, 1);
+        ssize_t bytes_read = read(port->fd, &c, 1);
         
         if (bytes_read <= 0) {
             usleep(10000); // 10ms
@@ -293,7 +248,7 @@ void* usb_listener_loop(void *arg) {
                 parse_and_execute_command(buffer, port->port_id);
                 buffer_pos = 0;
             }
-        } else if (buffer_pos < sizeof(buffer) - 1) {
+        } else if (buffer_pos < (int)sizeof(buffer) - 1) {
             buffer[buffer_pos++] = c;
         }
     }

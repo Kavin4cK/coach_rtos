@@ -80,16 +80,35 @@ void display_clear() {
 }
 
 // Draw a filled rectangle
-static void draw_rect(int x, int y, int w, int h, uint16_t color) {
-    if (use_terminal_only || !fb_ptr) return;
+// Replaced the draw_rect function in src/display.c with this version:
+
+void draw_rect(int x, int y, int w, int h, uint16_t color) {
+    if (!fbp) return;
     
-    for (int j = y; j < y + h && j < vinfo.yres; j++) {
-        for (int i = x; i < x + w && i < vinfo.xres; i++) {
-            fb_ptr[j * vinfo.xres + i] = color;
+    // Top and bottom horizontal lines
+    for (int i = x; i < x + w && i < (int)vinfo.xres; i++) {
+        if (y >= 0 && y < (int)vinfo.yres) {
+            long location = (i + vinfo.xoffset) + (y + vinfo.yoffset) * finfo.line_length / 2;
+            *((uint16_t*)(fbp + location * 2)) = color;
+        }
+        if ((y + h - 1) >= 0 && (y + h - 1) < (int)vinfo.yres) {
+            long location = (i + vinfo.xoffset) + (y + h - 1 + vinfo.yoffset) * finfo.line_length / 2;
+            *((uint16_t*)(fbp + location * 2)) = color;
+        }
+    }
+    
+    // Left and right vertical lines
+    for (int j = y; j < y + h && j < (int)vinfo.yres; j++) {
+        if (x >= 0 && x < (int)vinfo.xres) {
+            long location = (x + vinfo.xoffset) + (j + vinfo.yoffset) * finfo.line_length / 2;
+            *((uint16_t*)(fbp + location * 2)) = color;
+        }
+        if ((x + w - 1) >= 0 && (x + w - 1) < (int)vinfo.xres) {
+            long location = (x + w - 1 + vinfo.xoffset) + (j + vinfo.yoffset) * finfo.line_length / 2;
+            *((uint16_t*)(fbp + location * 2)) = color;
         }
     }
 }
-
 // Get color for cabin state
 static uint16_t get_cabin_color(CabinState state) {
     switch (state) {
