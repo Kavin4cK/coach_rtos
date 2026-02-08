@@ -44,5 +44,7 @@ void display_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t 
 void display_update_coach_layout(void);
 void display_show_emergency(const char *message);
 void display_terminal_coach_status(void);
+void display_render(void); // Main render function called by tasks
+void display_status_message(const char *message); // Display status messages
 
 #endif // DISPLAY_H
