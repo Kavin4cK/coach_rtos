@@ -68,10 +68,10 @@ void network_parse_command(const char *cmd_str, int client_id) {
         
         if (cabin_id >= 0 && cabin_id < NUM_CABINS && state) {
             if (strcmp(state, "ON") == 0) {
-                control_cabin_light(cabin_id, true);
+                cabin_set_light(cabin_id, true);
                 network_send_response(client_id, "OK: Light ON");
             } else if (strcmp(state, "OFF") == 0) {
-                control_cabin_light(cabin_id, false);
+                cabin_set_light(cabin_id, false);
                 network_send_response(client_id, "OK: Light OFF");
             } else {
                 network_send_response(client_id, "ERROR: Use ON or OFF");
@@ -85,7 +85,7 @@ void network_parse_command(const char *cmd_str, int client_id) {
         int temp = atoi(strtok(NULL, " "));
         
         if (cabin_id >= 0 && cabin_id < NUM_CABINS && temp >= 10 && temp <= 35) {
-            adjust_temperature(cabin_id, temp);
+            cabin_set_temperature(cabin_id, temp);
             network_send_response(client_id, "OK: Temperature set");
         } else if (cabin_id < 0 || cabin_id >= NUM_CABINS) {
             network_send_response(client_id, "ERROR: Invalid cabin ID");
@@ -97,7 +97,7 @@ void network_parse_command(const char *cmd_str, int client_id) {
         int cabin_id = atoi(strtok(NULL, " "));
         
         if (cabin_id >= 0 && cabin_id < NUM_CABINS) {
-            trigger_passenger_emergency(cabin_id);
+            cabin_set_emergency(cabin_id, true);
             network_send_response(client_id, "OK: Emergency triggered");
         } else {
             network_send_response(client_id, "ERROR: Invalid cabin ID");
@@ -107,7 +107,7 @@ void network_parse_command(const char *cmd_str, int client_id) {
         int cabin_id = atoi(strtok(NULL, " "));
         
         if (cabin_id >= 0 && cabin_id < NUM_CABINS) {
-            trigger_fire_emergency(cabin_id);
+            cabin_set_fire(cabin_id, true);
             network_send_response(client_id, "OK: Fire alert triggered");
         } else {
             network_send_response(client_id, "ERROR: Invalid cabin ID");
@@ -118,10 +118,10 @@ void network_parse_command(const char *cmd_str, int client_id) {
         
         if (state) {
             if (strcmp(state, "LOW") == 0) {
-                set_power_state(false);
+                system_set_power_low(true);
                 network_send_response(client_id, "OK: Power LOW");
             } else if (strcmp(state, "NORMAL") == 0) {
-                set_power_state(true);
+                system_set_power_low(false);
                 network_send_response(client_id, "OK: Power NORMAL");
             } else {
                 network_send_response(client_id, "ERROR: Use LOW or NORMAL");
@@ -132,7 +132,7 @@ void network_parse_command(const char *cmd_str, int client_id) {
         char *action = strtok(NULL, " ");
         
         if (action && strcmp(action, "PULL") == 0) {
-            trigger_chain_pull();
+            system_set_chain_pull(true);
             network_send_response(client_id, "OK: Chain pulled");
         } else {
             network_send_response(client_id, "ERROR: Use PULL");
