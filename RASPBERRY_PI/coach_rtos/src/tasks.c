@@ -215,11 +215,14 @@ void system_clear_all_emergencies(void) {
 void* task_fire_emergency(void* arg) {
     Task* self = (Task*)arg;
     log_message("[Task %d] Fire Emergency Handler started", self->id);
+    bool prev_fire_active = false;
 
     while (g_system.system_running && self->is_active) {
         pthread_mutex_lock(&g_system.system_mutex);
+        bool current_fire_active = g_system.fire_active;
 
-        if (g_system.fire_active) {
+        // Only process on rising edge (false -> true transition)
+        if (current_fire_active && !prev_fire_active) {
             self->state = TASK_RUNNING;
             pthread_mutex_unlock(&g_system.system_mutex);
 
@@ -234,13 +237,22 @@ void* task_fire_emergency(void* arg) {
                 pthread_mutex_unlock(&g_system.cabins[i].mutex);
             }
 
+            log_message("[FIRE EMERGENCY] Alert processed. Use CLEAR to reset.");
             scheduler_task_complete(self->id);
             self->state = TASK_READY;
+            prev_fire_active = true;
             usleep(100000); // 100ms response time
-        } else {
+        } else if (!current_fire_active) {
+            // Reset when emergency is cleared
+            prev_fire_active = false;
             self->state = TASK_READY;
             pthread_cond_wait(&g_system.task_ready_cond, &g_system.system_mutex);
             pthread_mutex_unlock(&g_system.system_mutex);
+        } else {
+            // Emergency still active but already processed
+            self->state = TASK_READY;
+            pthread_mutex_unlock(&g_system.system_mutex);
+            usleep(500000); // Sleep 500ms while waiting for clear
         }
     }
 
@@ -252,11 +264,14 @@ void* task_fire_emergency(void* arg) {
 void* task_passenger_emergency(void* arg) {
     Task* self = (Task*)arg;
     log_message("[Task %d] Passenger Emergency Handler started", self->id);
+    bool prev_emergency_active = false;
 
     while (g_system.system_running && self->is_active) {
         pthread_mutex_lock(&g_system.system_mutex);
+        bool current_emergency_active = g_system.emergency_active;
 
-        if (g_system.emergency_active) {
+        // Only process on rising edge (false -> true transition)
+        if (current_emergency_active && !prev_emergency_active) {
             self->state = TASK_RUNNING;
             pthread_mutex_unlock(&g_system.system_mutex);
 
@@ -271,13 +286,22 @@ void* task_passenger_emergency(void* arg) {
                 pthread_mutex_unlock(&g_system.cabins[i].mutex);
             }
 
+            log_message("[PASSENGER EMERGENCY] Alert processed. Use CLEAR to reset.");
             scheduler_task_complete(self->id);
             self->state = TASK_READY;
+            prev_emergency_active = true;
             usleep(150000); // 150ms adaptive response
-        } else {
+        } else if (!current_emergency_active) {
+            // Reset when emergency is cleared
+            prev_emergency_active = false;
             self->state = TASK_READY;
             pthread_cond_wait(&g_system.task_ready_cond, &g_system.system_mutex);
             pthread_mutex_unlock(&g_system.system_mutex);
+        } else {
+            // Emergency still active but already processed
+            self->state = TASK_READY;
+            pthread_mutex_unlock(&g_system.system_mutex);
+            usleep(500000); // Sleep 500ms while waiting for clear
         }
     }
 
@@ -289,6 +313,7 @@ void* task_passenger_emergency(void* arg) {
 void* task_chain_pull(void* arg) {
     Task* self = (Task*)arg;
     log_message("[Task %d] Chain Pull Handler started", self->id);
+    bool prev_chain_pulled = false;
 
     while (g_system.system_running && self->is_active) {
         self->state = TASK_READY;
@@ -298,11 +323,16 @@ void* task_chain_pull(void* arg) {
         bool emergency = g_system.emergency_active;
         pthread_mutex_unlock(&g_system.system_mutex);
 
-        if (emergency) {
+        // Only process on rising edge
+        if (emergency && !prev_chain_pulled) {
             self->state = TASK_RUNNING;
-            log_message("[CHAIN PULL] Emergency stop sequence active");
+            log_message("[CHAIN PULL] Emergency stop sequence activated");
+            log_message("[CHAIN PULL] Alert processed. Use CLEAR to reset.");
             scheduler_task_complete(self->id);
             self->state = TASK_READY;
+            prev_chain_pulled = true;
+        } else if (!emergency) {
+            prev_chain_pulled = false;
         }
 
         usleep(200000); // 200ms cycle
