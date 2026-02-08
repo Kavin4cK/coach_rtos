@@ -61,10 +61,12 @@ int usb_serial_init(const char *device) {
     (void)device; // Suppress unused parameter warning
     
     // Initialize all 3 USB ports
+    // Port 0: Raspberry Pi Pico (appears as /dev/ttyACM0)
+    // Port 1-2: USB Serial adapters (appear as /dev/ttyUSB*)
     const char *devices[MAX_USB_PORTS] = {
-        "/dev/ttyUSB0",
-        "/dev/ttyUSB1",
-        "/dev/ttyUSB2"
+        "/dev/ttyACM0",  // Pico with DS18B20 temperature sensor
+        "/dev/ttyUSB1",  // USB serial device 1
+        "/dev/ttyUSB2"   // USB serial device 2
     };
     
     int active_count = 0;

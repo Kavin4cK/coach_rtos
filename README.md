@@ -7,26 +7,41 @@ Real-Time Operating System (RTOS) simulation for managing subsystems within Indi
 ### Key Features
 - 8 prioritized tasks (P1-P10) managing critical subsystems
 - Concurrent 3-channel USB communication
+- **Real-time temperature monitoring** with DS18B20 sensors via Raspberry Pi Pico
 - Deterministic response times (<100ms for critical events)
 - Fire emergency, passenger emergency, and chain pull handlers
 - Power management with load shedding
 - Temperature regulation and lighting control
 - Real-time terminal display or TFT framebuffer output
+- **Network control** via Ethernet (TCP/IP)
 
 ## System Architecture
 
 ```
-┌─────────────┐         USB Cables (x3)        ┌──────────────────┐
-│             │    ────────────────────────►    │                  │
-│   LAPTOP    │    ◄────────────────────────    │  RASPBERRY PI 4  │
-│  (Python    │         115200 baud 8N1         │   (C + POSIX)    │
-│  Event Gen) │                                 │                  │
-└─────────────┘                                 └──────────────────┘
-      GUI                                         RTOS Scheduler
-  Concurrent                                      8 Priority Tasks
-  Command Sender                                  Display Update
-```
+┌─────────────┐       USB/Network          ┌──────────────────┐
+│             │    ──────────────────►      │                  │
+│   LAPTOP    │    ◄──────────────────      │  RASPBERRY PI 4  │
+│  (Python    │    Ethernet or USB          │   (C + POSIX)    │
+│  Event Gen) │                             │                  │
+└─────────────┘                             └────────┬─────────┘
+      GUI                                            │ USB
+  Event Control                                      │
+                                                     │
+                               ┌────────────────────┴─────────┐
+                               │                              │
+                      ┌────────▼────────┐          ┌─────────▼────────┐
+                      │ PICO + DS18B20  │          │ PICO + DS18B20  │
+                      │  Cabin 0 Temp   │          │  Cabin 1 Temp   │
+                      └─────────────────┘          └─────────────────┘
+                         (via /dev/ttyACM0)           (via /dev/ttyACM1)
+``USB ports for Pico sensors
+- Optional: 3.5" TFT Display (480×320, SPI)
 
+### Temperature Sensors (Optional):
+- Raspberry Pi Pico (per cabin)
+- DS18B20 Digital Temperature Sensor
+- 4.7kΩ Resistor (pull-up)
+- USB cables (Pico to Pi
 ## Hardware Requirements
 
 ### Raspberry Pi Side:
@@ -157,6 +172,82 @@ sudo chmod 666 /dev/ttyUSB*
 **Problem**: Only 1 or 2 USB ports detected
 - System will work with whatever ports are available
 - Missing ports will be logged as failed but won't crash the system
+
+---
+
+## PART 1B: Temperature Sensor Setup (Optional)
+
+### Real-Time Temperature Monitoring with Raspberry Pi Pico
+
+Add live temperature readings from DS18B20 sensors using Raspberry Pi Pico!
+
+#### Hardware Needed (per cabin):
+- **Raspberry Pi Pico** - $4
+- **DS18B20 Temperature Sensor** - $2  
+- **4.7kΩ Resistor** (Yellow-Violet-Red)
+- Breadboard & jumper wires
+- USB cable (Micro USB)
+
+#### Circuit:
+```
+Pico 3.3V (Pin 36) ──┬────► DS18B20 VCC (Pin 3)
+                     │
+                  4.7k pull-up
+                     │
+Pico GP2 (Pin 4) ────┴────► DS18B20 DATA (Pin 2)
+
+Pico GND (Pin 3) ─────────► DS18B20 GND (Pin 1)
+```
+
+#### Quick Setup:
+
+**1. Install MicroPython on Pico:**
+- Download: https://micropython.org/download/rp2-pico/
+- Hold **BOOTSEL** button while plugging in USB
+- Copy .uf2 file to **RPI-RP2** drive
+
+**2. Upload Temperature Code:**
+- Install Thonny IDE: https://thonny.org/
+- Open `RASPBERRY_PI_PICO/temp_sensor.py`
+- File → Save As → Raspberry Pi Pico → Save as `main.py`
+- Edit: `CABIN_ID = 0` (set your cabin number 0-9)
+
+**3. Connect to Raspberry Pi:**
+```bash
+# Check Pico appears
+ls -l /dev/ttyACM0
+
+# Set permissions
+sudo chmod 666 /dev/ttyACM0
+```
+
+**4. Test:**
+```bash
+# Watch temperature updates
+cat /dev/ttyACM0
+# Should show: TEMP 0 23 (updates every 10 sec)
+```
+
+**That's it!** The RTOS automatically listens to `/dev/ttyACM0` and updates temperatures.
+
+**LED Status on Pico:**
+- 3 blinks = Startup OK ✅
+- 1 blink = Reading temp 📖
+- 2 blinks = Sending data 📤
+- 5 rapid blinks = HIGH TEMP EMERGENCY ⚠️
+- Solid ON = Sensor error ❌
+
+**🔥 Automatic High Temperature Detection:**
+- **Threshold**: 45°C (configurable in `HIGH_TEMP_THRESHOLD`)
+- **Action**: Automatically sends `EMERGENCY` command to RTOS
+- **Alert Rate**: Every 3 seconds while temperature exceeds threshold
+- **Recovery**: Auto-clears when temperature returns below threshold
+- **Safety Feature**: Provides continuous alerts without manual intervention
+
+**📖 Full Guides:**
+- Quick Start: `RASPBERRY_PI_PICO/QUICKSTART.md`
+- Circuit Details: `RASPBERRY_PI_PICO/WIRING_DIAGRAM.txt` 
+- Integration: `TEMPERATURE_SENSOR_INTEGRATION.md`
 
 ---
 

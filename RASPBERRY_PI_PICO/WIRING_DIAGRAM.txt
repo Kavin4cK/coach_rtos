@@ -1,0 +1,292 @@
+DS18B20 TEMPERATURE SENSOR WIRING DIAGRAM
+==========================================
+
+COMPONENT VIEW - DS18B20 Temperature Sensor
+--------------------------------------------
+Looking at the FLAT SIDE with pins facing down:
+
+         __________
+        |          |
+        |  DS18B   |
+        |    20    |
+        |__________|
+         |   |   |
+         1   2   3
+
+Pin 1 = GND   (Ground)
+Pin 2 = DATA  (Data In/Out)
+Pin 3 = VCC   (Power 3.3V)
+
+
+RASPBERRY PI PICO PINOUT (Relevant Pins)
+-----------------------------------------
+
+     USB Port (Micro USB)
+         ┌─────┐
+         │ USB │
+         └─────┘
+    ┌─────────────┐
+  1 │GP0          │ 40  VBUS
+  2 │GP1          │ 39  VSYS
+  3 │GND     ◄════╣ 38  GND
+  4 │GP2     ◄════╣ 37  3V3_EN
+  5 │GP3          │ 36  3V3(OUT) ◄═══
+  6 │GP4          │ 35  ADC_VREF
+  7 │GP5          │ 34  GP28
+    │ ...         │     ...
+    │             │
+ 25 │GP19         │ 25  LED (Built-in)
+    └─────────────┘
+
+Key Pins Used:
+- Pin 4:  GP2 (GPIO 2) - DATA connection
+- Pin 36: 3V3(OUT) - Power supply (3.3V)
+- Pin 3:  GND - Ground
+
+
+BREADBOARD WIRING DIAGRAM
+--------------------------
+
+Raspberry Pi Pico                    Breadboard                 DS18B20 Sensor
+                                                              
+Pin 36 (3V3) ─────────────► Power Rail (+) ──┬──────────────► Pin 3 (VCC)
+                                              │
+                                          4.7kΩ Resistor
+                                              │
+Pin 4 (GP2)  ─────────────► Row 10 ──────────┴──────────────► Pin 2 (DATA)
+
+Pin 3 (GND)  ─────────────► Ground Rail (-) ─────────────────► Pin 1 (GND)
+
+
+DETAILED SCHEMATIC
+------------------
+
+                    Raspberry Pi Pico
+                    ┌───────────────┐
+                    │               │
+                    │           3V3 ├──────┬───────────┐
+                    │               │      │           │
+                    │               │   4.7kΩ        VCC
+                    │               │      │           │
+                    │          GP2  ├──────┴─────── DATA ──── DS18B20
+                    │               │                │
+                    │          GND  ├──────────── GND
+                    │               │
+                    └───────────────┘
+
+
+POWER FLOW
+----------
+
+USB Power (5V from Raspberry Pi)
+    ↓
+Pico Onboard Regulator
+    ↓
+3.3V Output (Pin 36)
+    ↓
+DS18B20 VCC (Pin 3)
+
+
+DATA LINE CIRCUIT
+-----------------
+
+                  3.3V
+                   │
+                 4.7kΩ (Pull-up Resistor)
+                   │
+    GP2 ───────────┼───────── DATA (Pin 2)
+                   │
+                 DS18B20
+                   │
+                  GND
+
+
+WHY 4.7kΩ PULL-UP RESISTOR?
+----------------------------
+
+The DS18B20 uses 1-Wire protocol which requires:
+- Open-drain/tri-state output
+- External pull-up resistor to define HIGH state
+- 4.7kΩ is optimal for:
+  * Short cables (< 20m)
+  * 5V or 3.3V operation
+  * Standard timing
+
+
+PHYSICAL LAYOUT ON BREADBOARD
+------------------------------
+
+                   Breadboard
+        ═══════════════════════════════
+        ║  -  Power Rail  -  -  -  +  ║
+        ║  -   -   -   -   -   -   +  ║
+        ╠══════════════════════════════╣
+     1  ║  •   •   •   •   •   •   •  ║
+     2  ║  •   •   •   •   •   •   •  ║
+     3  ║  •   •   •   •   •   •   •  ║
+     4  ║  •   •   •   •   •   •   •  ║
+     5  ║  •   •  [1] [2] [3]  •   •  ║  ← DS18B20 here
+     6  ║  •   •   •   •   •   •   •  ║
+     7  ║  •   •  [4.7kΩ] •   •   •  ║  ← Resistor here
+        ╠══════════════════════════════╣
+        ║  -   -   -   -   -   -   +  ║
+        ║  -   -   -   -   -   -   +  ║
+        ═══════════════════════════════
+
+    [1] DS18B20 Pin 1 (GND)  → Ground rail
+    [2] DS18B20 Pin 2 (DATA) → GP2 & Resistor
+    [3] DS18B20 Pin 3 (VCC)  → Power rail & Resistor
+    
+    4.7kΩ connects Pin 2 to Pin 3 (DATA to VCC)
+
+
+STEP-BY-STEP ASSEMBLY
+---------------------
+
+Step 1: Insert DS18B20
+   Place sensor in breadboard with flat side facing you
+   Pins should be in rows 5a, 5b, 5c
+
+Step 2: Connect GND (Pin 1)
+   Wire from Pin 1 (leftmost) → Ground rail (-)
+
+Step 3: Connect VCC (Pin 3)
+   Wire from Pin 3 (rightmost) → Power rail (+)
+
+Step 4: Connect DATA (Pin 2)
+   Wire from Pin 2 (middle) → Pico GP2
+
+Step 5: Add Pull-up Resistor
+   One leg to Pin 2 (DATA line)
+   Other leg to Pin 3 (VCC/power rail)
+
+Step 6: Power Rails
+   Ground rail (-) → Pico GND (Pin 3)
+   Power rail (+)  → Pico 3V3 (Pin 36)
+
+Step 7: USB Connection
+   Pico USB → Raspberry Pi USB port
+
+
+TESTING WITH MULTIMETER
+------------------------
+
+Before powering on:
+1. Continuity Test:
+   - Pin 1 to GND → Should beep
+   - Pin 3 to 3.3V → Should beep
+   - No shorts between VCC and GND
+
+2. Resistance Test:
+   - Between Pin 2 and Pin 3 → Should read ~4.7kΩ
+   - Between Pin 2 and GP2 → Should read <1Ω
+
+After powering on:
+3. Voltage Test:
+   - Pin 3 to GND → Should read 3.3V
+   - Pin 2 to GND → Should read 3.3V (pulled up)
+
+
+COMMON WIRING MISTAKES
+-----------------------
+
+❌ Wrong: No pull-up resistor
+   → Sensor won't respond
+
+❌ Wrong: Pull-up to GND instead of VCC
+   → Sensor won't work
+
+❌ Wrong: DS18B20 pins reversed
+   → Check flat side orientation
+
+❌ Wrong: 4.7Ω instead of 4.7kΩ
+   → Check resistor color bands
+
+✅ Correct: 4.7kΩ resistor from DATA to VCC
+
+
+RESISTOR COLOR CODE
+-------------------
+
+4.7kΩ Resistor (4-band):
+   Yellow - Violet - Red - Gold
+   (4)    (7)     (×100)  (±5%)
+
+4.7kΩ Resistor (5-band):
+   Yellow - Violet - Black - Brown - Brown
+   (4)    (7)     (0)     (×10)    (±1%)
+
+
+WIRE RECOMMENDATIONS
+--------------------
+
+For breadboard testing:
+- 22 AWG solid core wire
+- Different colors:
+  * Red → Power (3.3V)
+  * Black → Ground
+  * Yellow/Green → Data
+
+For permanent installation:
+- 22-24 AWG stranded wire
+- Shielded cable for longer runs
+- Heat shrink tubing at connections
+
+
+CABLE EXTENSION (Optional)
+---------------------------
+
+For remote sensor placement:
+
+           Pico                         Remote DS18B20
+            │                                 │
+        GP2 ├───── Red ──────────────────► VCC (Pin 3)
+            │                   4.7kΩ       │
+            │                    │          │
+            ├───── Yellow ───────┴────────► DATA (Pin 2)
+            │                               │
+        GND ├───── Black ─────────────────► GND (Pin 1)
+            │
+
+Max length: 20m with 4.7kΩ pull-up
+For longer: Use 2.2kΩ or 1.5kΩ
+
+
+TROUBLESHOOTING FLOWCHART
+-------------------------
+
+Sensor not detected?
+   │
+   ├─► Check VCC: Is Pin 3 at 3.3V?
+   │   ├─► No → Check power connections
+   │   └─► Yes → Continue
+   │
+   ├─► Check GND: Is Pin 1 at 0V?
+   │   ├─► No → Check ground connections
+   │   └─► Yes → Continue
+   │
+   ├─► Check DATA: Is Pin 2 at 3.3V when idle?
+   │   ├─► No → Check pull-up resistor
+   │   └─► Yes → Continue
+   │
+   └─► Check orientation: Flat side correct?
+       ├─► No → Rotate sensor 180°
+       └─► Yes → Sensor may be faulty
+
+
+SAFETY NOTES
+------------
+
+⚠ Do NOT power with 5V direct to DS18B20
+   → Maximum rating is 5.5V
+   → Use 3.3V for safety margin
+
+⚠ Disconnect before wiring changes
+   → Prevents shorts
+
+⚠ Use proper gauge wire
+   → 22-24 AWG appropriate
+
+✓ DS18B20 has reverse polarity protection
+   → Will not damage if connected backwards
+   → Just won't work until corrected

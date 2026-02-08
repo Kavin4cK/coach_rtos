@@ -46,6 +46,10 @@ void print_help(void) {
     printf("  -n, --network           Enable network mode (TCP port 5000)\n");
     printf("  -f, --framebuffer       Use framebuffer display\n");
     printf("  -t, --terminal          Use terminal display (default)\n");
+    printf("\nUSB Ports (automatically detected):\n");
+    printf("  /dev/ttyACM0  - Raspberry Pi Pico (temperature sensor)\n");
+    printf("  /dev/ttyUSB1  - USB serial device 1 (event generator)\n");
+    printf("  /dev/ttyUSB2  - USB serial device 2 (event generator)\n");
     printf("\nCommands (via USB/stdin):\n");
     printf("  LIGHT <cabin_id> ON|OFF        Control cabin lighting\n");
     printf("  TEMP <cabin_id> <value>        Set cabin temperature (10-35°C)\n");
