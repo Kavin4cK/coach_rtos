@@ -29,7 +29,7 @@
 #define CABIN_ID 0              // Which cabin this sensor monitors (0-9)
 #define READ_INTERVAL 5000      // Read temperature every 5 seconds (milliseconds)
 #define SEND_INTERVAL 10000     // Send update to Pi every 10 seconds (milliseconds)
-#define HIGH_TEMP_THRESHOLD 45  // Temperature threshold for emergency (°C)
+#define HIGH_TEMP_THRESHOLD 24  // TESTING: Lowered to 24°C for easy testing (normal: 45)
 #define HIGH_TEMP_ALERT_INTERVAL 3000  // Alert every 3 seconds when over threshold (milliseconds)
 
 #define LED_PIN 13              // Built-in LED on Arduino Nano
@@ -61,9 +61,9 @@ void setup() {
   
   // Initialize serial communication
   Serial.begin(SERIAL_BAUD);
-  while (!Serial) {
-    ; // Wait for serial port to connect (needed for some boards)
-  }
+  
+  // Small delay to allow serial to initialize
+  delay(1000);
   
   // Startup message
   Serial.println();
