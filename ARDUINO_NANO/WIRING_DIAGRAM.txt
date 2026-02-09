@@ -1,0 +1,374 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                  DS18B20 TEMPERATURE SENSOR WIRING                        ║
+║                        Arduino Nano Edition                               ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════
+  CIRCUIT DIAGRAM 1: SCHEMATIC VIEW
+═══════════════════════════════════════════════════════════════════════════
+
+Arduino Nano                                      DS18B20 Temperature Sensor
+┌────────────────┐                               ┌─────────────────────────┐
+│                │                               │    (Flat side view)     │
+│                │                               │                         │
+│   5V  ─────────┼───────┬───────────────────────┤ Pin 3 (VCC)  [Red]     │
+│                │       │                       │                         │
+│                │    4.7kΩ                      │                         │
+│                │  Resistor                     │                         │
+│                │  (Y-V-R)                      │                         │
+│                │       │                       │                         │
+│   D2  ─────────┼───────┴───────────────────────┤ Pin 2 (DATA) [Yellow]  │
+│                │                               │                         │
+│                │                               │                         │
+│  GND  ─────────┼───────────────────────────────┤ Pin 1 (GND)  [Black]   │
+│                │                               │                         │
+│  D13  (LED) ●  │  Built-in LED indicator       └─────────────────────────┘
+│                │
+│  USB  ─────────┼──►  To Raspberry Pi (serial data + power)
+│                │
+└────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════
+  CIRCUIT DIAGRAM 2: DS18B20 PIN IDENTIFICATION
+═══════════════════════════════════════════════════════════════════════════
+
+DS18B20 TO-92 Package (viewed from front with flat side facing you):
+
+         ┌─────────────┐
+         │  DS18B20    │
+         │             │
+         │   FLAT SIDE │
+         │             │
+         │   1   2   3 │
+         └───┬───┬───┬─┘
+             │   │   │
+             │   │   └───── Pin 3: VCC (Power)      → Arduino 5V
+             │   │
+             │   └───────── Pin 2: DATA (Signal)    → Arduino D2 + 4.7kΩ to VCC
+             │
+             └───────────── Pin 1: GND (Ground)     → Arduino GND
+
+
+COLOR CODING (if using pre-wired sensor):
+┌────────────────┬─────────────┬──────────────────┐
+│ Wire Color     │ DS18B20 Pin │ Connect To       │
+├────────────────┼─────────────┼──────────────────┤
+│ BLACK          │ Pin 1 (GND) │ Arduino GND      │
+│ YELLOW/WHITE   │ Pin 2 (DATA)│ Arduino D2       │
+│ RED            │ Pin 3 (VCC) │ Arduino 5V       │
+└────────────────┴─────────────┴──────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════
+  CIRCUIT DIAGRAM 3: BREADBOARD LAYOUT (TOP VIEW)
+═══════════════════════════════════════════════════════════════════════════
+
+                        Arduino Nano
+                 ┌───────────────────────┐
+                 │  ●●●●●●●●●●●●●●●      │  (USB side)
+                 │  [=====USB====]       │
+                 │  ●●●●●●●●●●●●●●●      │
+                 └─┬──┬──┬──┬──┬──┬──┬──┘
+                   │  │  │  │  │  │  │
+         ──────────┘  │  │  │  │  │  └────────── (Other pins)
+        5V            │  │  │  │  └───────────── Reset
+                      │  │  │  └──────────────── GND
+                      │  │  └─────────────────── D2
+                      │  └────────────────────── D3...
+                      └───────────────────────── USB power
+                      
+═════════════════════════════════════════════════════════════════════════
+Breadboard Power Rails:
+  Red Rail  (+) ══════════════════════  5V from Arduino ──┐
+                                                           │
+  Blue Rail (-) ══════════════════════  GND from Arduino  │
+═════════════════════════════════════════════════════════│═══════════════
+                                                           │
+Breadboard Rows:                                        4.7kΩ
+                                                           │
+  Row 15:  [5V]─────────────[DS18B20 Pin 3 VCC]──────────┘
+           (Red wire)        │
+                             │
+  Row 16:  [D2]─────────────[DS18B20 Pin 2 DATA]─────────┬─── 4.7kΩ to Row 15
+           (Yellow wire)     │                            │
+                             │                         (Pull-up)
+  Row 17:  [GND]────────────[DS18B20 Pin 1 GND]
+           (Black wire)      │
+                            
+═══════════════════════════════════════════════════════════════════════════
+
+
+═══════════════════════════════════════════════════════════════════════════
+  CIRCUIT DIAGRAM 4: ARDUINO NANO PINOUT REFERENCE
+═══════════════════════════════════════════════════════════════════════════
+
+                      ┌─────────────┐
+                      │   USB       │
+                      │  [=====]    │
+                      └─────┬───────┘
+                            │
+    TX1  D1  ●●●●●●●●●●●●●●●│●●●●●●●●●●●●●●●  VIN
+    RX0  D0  ●●●●●●●●●●●●●●●│●●●●●●●●●●●●●●●  GND
+   RESET     ●●●●●●●●●●●●●●●│●●●●●●●●●●●●●●●  RESET
+     GND ────●──────────────┼──────────────●──── 5V  (Use this for DS18B20)
+         D2 ●●●●●●●●●●●●●●●│●●●●●●●●●●●●●●●  A7
+         D3 ●●●●●●●●●●●●●●●│●●●●●●●●●●●●●●●  A6
+         D4 ●●●●●●●●●●●●●●●│●●●●●●●●●●●●●●●  A5 (SCL)
+         D5 ●●●●●●●●●●●●●●●│●●●●●●●●●●●●●●●  A4 (SDA)
+         D6 ●●●●●●●●●●●●●●●│●●●●●●●●●●●●●●●  A3
+         D7 ●●●●●●●●●●●●●●●│●●●●●●●●●●●●●●●  A2
+         D8 ●●●●●●●●●●●●●●●│●●●●●●●●●●●●●●●  A1
+         D9 ●●●●●●●●●●●●●●●│●●●●●●●●●●●●●●●  A0
+        D10 ●●●●●●●●●●●●●●●│●●●●●●●●●●●●●●●  AREF
+        D11 ●●●●●●●●●●●●●●●│●●●●●●●●●●●●●●●  3.3V
+        D12 ●●●●●●●●●●●●●●●│●●●●●●●●●●●●●●●  D13 (LED) ← Built-in LED
+        
+        │                             │
+        └─────── Digital Pins ────────┘
+
+
+Pins Used in This Project:
+┌──────────┬────────────────────────────────────────────┐
+│ Pin Name │ Function                                   │
+├──────────┼────────────────────────────────────────────┤
+│ 5V       │ Power supply to DS18B20 VCC (Pin 3)       │
+│ GND      │ Ground for DS18B20 GND (Pin 1)            │
+│ D2       │ OneWire DATA line to DS18B20 (Pin 2)     │
+│ D13      │ Built-in LED (automatic indicator)        │
+│ USB      │ Serial communication to Raspberry Pi      │
+└──────────┴────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════
+  CIRCUIT DIAGRAM 5: RESISTOR COLOR CODE
+═══════════════════════════════════════════════════════════════════════════
+
+4.7kΩ Resistor (4700Ω):
+
+     Band 1   Band 2   Band 3   Band 4
+       │        │        │        │
+       ▼        ▼        ▼        ▼
+    ┌──┴────────┴────────┴────────┴──┐
+    │ Yellow  Violet    Red      Gold │  ← Resistor body
+    │   4       7       ×100     ±5%  │
+    └─────────────────────────────────┘
+    
+    Value: 47 × 100 = 4700Ω = 4.7kΩ
+    Tolerance: ±5% (Gold)
+
+Alternative: 4.7kΩ ±10% (Silver):
+    │ Yellow  Violet    Red     Silver│
+    │   4       7       ×100    ±10%  │
+
+
+═══════════════════════════════════════════════════════════════════════════
+  CIRCUIT DIAGRAM 6: COMPLETE SYSTEM WITH RASPBERRY PI
+═══════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         LAPTOP (Optional)                               │
+│                   ┌──────────────────────┐                              │
+│                   │  event_generator.py  │                              │
+│                   │    (Python GUI)      │                              │
+│                   └──────────┬───────────┘                              │
+└──────────────────────────────┼──────────────────────────────────────────┘
+                                │ USB (commands)
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      RASPBERRY PI 4                                     │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │                    Coach RTOS (C Program)                         │  │
+│  │  ┌────────────────┐  ┌──────────────┐  ┌────────────────────┐   │  │
+│  │  │  USB Listener  │  │  Scheduler   │  │  Emergency Tasks   │   │  │
+│  │  │  (Serial RX)   │  │  (Priority)  │  │  (Fire/Passenger)  │   │  │
+│  │  └────────┬───────┘  └──────────────┘  └────────────────────┘   │  │
+│  └───────────┼──────────────────────────────────────────────────────┘  │
+│              │                                                          │
+│  ┌───────────▼──────────────────────────────────────────────────────┐  │
+│  │ USB Ports: /dev/ttyUSB0, /dev/ttyUSB1, /dev/ttyUSB2, ...         │  │
+│  └───┬──────────────────┬──────────────────┬──────────────────────┬─┘  │
+└──────┼──────────────────┼──────────────────┼──────────────────────┼────┘
+       │ USB              │ USB              │ USB              
+       ▼                  ▼                  ▼                  
+┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+│ Arduino Nano │   │ Arduino Nano │   │ Arduino Nano │
+│  (Cabin 0)   │   │  (Cabin 1)   │   │  (Cabin 2)   │
+│  ┌────────┐  │   │  ┌────────┐  │   │  ┌────────┐  │
+│  │temp_    │  │   │  │temp_    │  │   │  │temp_    │  │
+│  │sensor   │  │   │  │sensor   │  │   │  │sensor   │  │
+│  │.ino     │  │   │  │.ino     │  │   │  │.ino     │  │
+│  └────┬───┘  │   │  └────┬───┘  │   │  └────┬───┘  │
+│       │ D2   │   │       │ D2   │   │       │ D2   │
+│       ▼      │   │       ▼      │   │       ▼      │
+│  ┌─────────┐ │   │  ┌─────────┐ │   │  ┌─────────┐ │
+│  │ DS18B20 │ │   │  │ DS18B20 │ │   │  │ DS18B20 │ │
+│  │  Sensor │ │   │  │  Sensor │ │   │  │  Sensor │ │
+│  └─────────┘ │   │  └─────────┘ │   │  └─────────┘ │
+└──────────────┘   └──────────────┘   └──────────────┘
+    Temp: 23°C         Temp: 25°C         Temp: 22°C
+
+
+Data Flow:
+─────────
+1. Arduino reads DS18B20 every 5 seconds
+2. Arduino sends: "TEMP <cabin_id> <value>\n" via USB serial
+3. Raspberry Pi receives via /dev/ttyUSB0 (or ttyUSB1, ttyUSB2)
+4. RTOS updates cabin temperature and displays
+5. If temp > 45°C: Arduino sends "EMERGENCY <cabin_id>\n"
+6. RTOS triggers passenger emergency task (Priority 2)
+7. Emergency alerts continuously until CLEAR command
+
+
+═══════════════════════════════════════════════════════════════════════════
+  ASSEMBLY CHECKLIST
+═══════════════════════════════════════════════════════════════════════════
+
+Step-by-step assembly verification:
+
+ [ ] 1. Place Arduino Nano on breadboard (straddling center gap)
+ 
+ [ ] 2. Identify DS18B20 pins (flat side facing you: 1-2-3 left-to-right)
+        Pin 1 (Left)   = GND   (Black wire)
+        Pin 2 (Middle) = DATA  (Yellow wire)
+        Pin 3 (Right)  = VCC   (Red wire)
+ 
+ [ ] 3. Insert DS18B20 into breadboard (3 pins in consecutive rows)
+ 
+ [ ] 4. Connect GND:
+        Arduino GND pin → DS18B20 Pin 1 (black jumper wire)
+ 
+ [ ] 5. Connect VCC:
+        Arduino 5V pin → DS18B20 Pin 3 (red jumper wire)
+ 
+ [ ] 6. Connect DATA:
+        Arduino D2 pin → DS18B20 Pin 2 (yellow jumper wire)
+ 
+ [ ] 7. Install pull-up resistor (4.7kΩ Yellow-Violet-Red):
+        One leg to DS18B20 Pin 2 (DATA)
+        Other leg to DS18B20 Pin 3 (VCC)
+ 
+ [ ] 8. Visual inspection:
+        - No crossed wires
+        - Resistor legs not touching GND
+        - DS18B20 orientation correct
+        - All connections secure
+ 
+ [ ] 9. Connect USB cable to Arduino
+ 
+ [ ] 10. Arduino LED lights up (power indicator near USB)
+ 
+ [ ] 11. Upload temp_sensor.ino sketch
+ 
+ [ ] 12. Open Serial Monitor (115200 baud)
+ 
+ [ ] 13. Verify output:
+         "Found 1 DS18B20 sensor(s)"
+         "[Reading 1] Cabin 0: XX.XX°C"
+ 
+ [ ] 14. LED behavior:
+         - 3 blinks on startup
+         - 1 blink every 5 seconds (reading)
+         - 2 blinks every 10 seconds (sending)
+
+
+═══════════════════════════════════════════════════════════════════════════
+  TROUBLESHOOTING GUIDE
+═══════════════════════════════════════════════════════════════════════════
+
+Problem: "Found 0 DS18B20 sensor(s)"
+─────────────────────────────────────
+  ✓ Check DS18B20 orientation (Pin 1=GND, 2=DATA, 3=VCC)
+  ✓ Verify 4.7kΩ resistor between DATA and VCC
+  ✓ Ensure D2 pin connection is solid
+  ✓ Try different digital pin (change DS18B20_PIN in code)
+
+
+Problem: Temperature reads -127.00°C
+─────────────────────────────────────
+  ✓ Sensor disconnected or bad connection
+  ✓ Missing pull-up resistor (critically important!)
+  ✓ Check power: 5V and GND properly connected
+  ✓ Try adding delay after sensors.requestTemperatures()
+
+
+Problem: Temperature reads ~85°C constantly
+────────────────────────────────────────────
+  ✓ Sensor still initializing (wait 5-10 seconds)
+  ✓ Reset Arduino (press reset button)
+  ✓ Check for short circuit between VCC and DATA
+
+
+Problem: LED stays solid ON
+────────────────────────────
+  ✓ Sensor error detected by code
+  ✓ Check Serial Monitor for error message
+  ✓ Verify wiring and resistor placement
+
+
+Problem: No serial output / garbage characters
+───────────────────────────────────────────────
+  ✓ Set Serial Monitor to 115200 baud
+  ✓ Close and reopen Serial Monitor
+  ✓ Press Arduino reset button
+  ✓ Check USB cable (must be data cable, not power-only)
+
+
+═══════════════════════════════════════════════════════════════════════════
+  ADDITIONAL RESOURCES
+═══════════════════════════════════════════════════════════════════════════
+
+Documentation Files:
+  • ARDUINO_SETUP.md      - Complete setup guide with all steps
+  • QUICKSTART.md         - Fast 5-minute setup for experienced users
+  • temp_sensor.ino       - Arduino sketch (source code)
+  • ../README.md          - Main project documentation
+
+Online Resources:
+  • OneWire Library:      https://github.com/PaulStoffregen/OneWire
+  • DallasTemperature:    https://github.com/milesburton/Arduino-Temperature-Control-Library
+  • DS18B20 Datasheet:    https://datasheets.maximintegrated.com/en/ds/DS18B20.pdf
+  • Arduino Nano Guide:   https://docs.arduino.cc/hardware/nano
+
+Video Tutorials:
+  • "DS18B20 with Arduino" - YouTube search
+  • "OneWire protocol explained"
+
+
+═══════════════════════════════════════════════════════════════════════════
+  SAFETY NOTES
+═══════════════════════════════════════════════════════════════════════════
+
+  ⚠️  DS18B20 maximum temperature: 125°C (257°F)
+      Do NOT use with boiling water or direct flame!
+
+  ⚠️  Always use 4.7kΩ pull-up resistor
+      Sensor may work intermittently without it but will fail randomly
+
+  ⚠️  Check polarity before powering on
+      Reversed VCC/GND can damage DS18B20 permanently
+
+  ⚠️  USB ports supply limited current (~500mA)
+      For >10 sensors, use external 5V power supply
+
+  ✅  DS18B20 is ESD-sensitive - handle with care
+  ✅  Use proper wire gauge for permanent installations
+  ✅  Waterproof sensors available for outdoor/harsh environments
+
+
+═══════════════════════════════════════════════════════════════════════════
+  REVISION HISTORY
+═══════════════════════════════════════════════════════════════════════════
+
+  Version 1.0 - February 2026
+    - Initial wiring diagrams for Arduino Nano
+    - DS18B20 temperature sensor circuit
+    - High-temperature emergency detection
+    - Multi-cabin deployment support
+
+
+═══════════════════════════════════════════════════════════════════════════
+
+                         END OF WIRING DIAGRAM
+
+═══════════════════════════════════════════════════════════════════════════

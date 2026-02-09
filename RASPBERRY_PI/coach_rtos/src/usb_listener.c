@@ -61,12 +61,19 @@ int usb_serial_init(const char *device) {
     (void)device; // Suppress unused parameter warning
     
     // Initialize all 3 USB ports
-    // Port 0: Raspberry Pi Pico (appears as /dev/ttyACM0)
-    // Port 1-2: USB Serial adapters (appear as /dev/ttyUSB*)
+    // Port 0: Arduino Nano (appears as /dev/ttyUSB0) or Raspberry Pi Pico (/dev/ttyACM0)
+    // Port 1-2: Additional USB Serial devices for event generators
+    
+    // NOTE: Change these based on your hardware:
+    // Arduino Nano: Use /dev/ttyUSB* ports
+    // Raspberry Pi Pico: Use /dev/ttyACM* ports
+    // You can mix and match (e.g., Arduino on USB0, Pico on ACM0, event generator on USB1)
+    
     const char *devices[MAX_USB_PORTS] = {
-        "/dev/ttyACM0",  // Pico with DS18B20 temperature sensor
-        "/dev/ttyUSB1",  // USB serial device 1
-        "/dev/ttyUSB2"   // USB serial device 2
+        "/dev/ttyUSB0",  // Arduino Nano with DS18B20 (recommended)
+                         // Change to "/dev/ttyACM0" if using Raspberry Pi Pico
+        "/dev/ttyUSB1",  // USB serial device 1 (event generator)
+        "/dev/ttyUSB2"   // USB serial device 2 (event generator)
     };
     
     int active_count = 0;

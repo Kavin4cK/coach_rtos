@@ -27,33 +27,37 @@ Real-Time Operating System (RTOS) simulation for managing subsystems within Indi
       GUI                                            │ USB
   Event Control                                      │
                                                      │
-                               ┌────────────────────┴─────────┐
-                               │                              │
-                      ┌────────▼────────┐          ┌─────────▼────────┐
-                      │ PICO + DS18B20  │          │ PICO + DS18B20  │
-                      │  Cabin 0 Temp   │          │  Cabin 1 Temp   │
-                      └─────────────────┘          └─────────────────┘
-                         (via /dev/ttyACM0)           (via /dev/ttyACM1)
-``USB ports for Pico sensors
-- Optional: 3.5" TFT Display (480×320, SPI)
+                               ┌────────────────────┴───────────────┐
+                               │                                    │
+                      ┌────────▼─────────┐          ┌──────────▼──────────┐
+                      │ Arduino + DS18B20│          │ Arduino + DS18B20   │
+                      │  Cabin 0 Temp    │          │  Cabin 1 Temp       │
+                      └──────────────────┘          └─────────────────────┘
+                      (via /dev/ttyUSB0)              (via /dev/ttyUSB1)
+```
 
-### Temperature Sensors (Optional):
-- Raspberry Pi Pico (per cabin)
-- DS18B20 Digital Temperature Sensor
-- 4.7kΩ Resistor (pull-up)
-- USB cables (Pico to Pi
 ## Hardware Requirements
 
 ### Raspberry Pi Side:
 - Raspberry Pi 4 (4GB RAM recommended)
 - Raspberry Pi OS (Lite or Desktop)
-- 3 available USB ports (for serial communication)
+- 3 available USB ports (for serial communication or temperature sensors)
 - Optional: 3.5" TFT Display (480×320, SPI)
 
 ### Laptop Side:
 - Any computer with Python 3.7+
 - 3 USB ports
 - 3x USB-A to USB-A cables (for serial connection)
+
+### Temperature Sensors (Optional but Recommended):
+- **Arduino Nano** (ATmega328P) - $4 each, OR **Raspberry Pi Pico** - $4 each
+- DS18B20 Digital Temperature Sensor - $2 each
+- 4.7kΩ Resistor (Yellow-Violet-Red) - $0.10 each
+- Breadboard & jumper wires - $2
+- USB cables: Mini-B for Arduino, Micro-USB for Pico - $2 each
+- **Total cost per cabin**: ~$10
+
+**Recommended**: Arduino Nano (easier setup, more beginner-friendly)
 
 ## Software Requirements
 
@@ -177,29 +181,65 @@ sudo chmod 666 /dev/ttyUSB*
 
 ## PART 1B: Temperature Sensor Setup (Optional)
 
-### Real-Time Temperature Monitoring with Raspberry Pi Pico
+### Real-Time Temperature Monitoring with Arduino Nano / Raspberry Pi Pico
 
-Add live temperature readings from DS18B20 sensors using Raspberry Pi Pico!
+Add live temperature readings from DS18B20 sensors using Arduino Nano (recommended) or Raspberry Pi Pico!
 
 #### Hardware Needed (per cabin):
-- **Raspberry Pi Pico** - $4
+- **Arduino Nano** (ATmega328P) - $4 OR **Raspberry Pi Pico** - $4
 - **DS18B20 Temperature Sensor** - $2  
 - **4.7kΩ Resistor** (Yellow-Violet-Red)
 - Breadboard & jumper wires
-- USB cable (Micro USB)
+- USB cable (Mini-B for Arduino, Micro-USB for Pico)
 
 #### Circuit:
 ```
-Pico 3.3V (Pin 36) ──┬────► DS18B20 VCC (Pin 3)
-                     │
-                  4.7k pull-up
-                     │
-Pico GP2 (Pin 4) ────┴────► DS18B20 DATA (Pin 2)
+Arduino Nano / Pico:       DS18B20 Temperature Sensor
+5V/3.3V ──────┬────────────► VCC (Pin 3)
+              │
+           4.7k pull-up
+              │
+D2/GP2 ───────┴────────────► DATA (Pin 2)
 
-Pico GND (Pin 3) ─────────► DS18B20 GND (Pin 1)
+GND ────────────────────────► GND (Pin 1)
 ```
 
 #### Quick Setup:
+
+**Option A: Arduino Nano (Recommended - Easier Setup)**
+
+**1. Install Arduino IDE:**
+- Download: https://www.arduino.cc/en/software
+- Install OneWire and DallasTemperature libraries
+  - **Tools → Manage Libraries** → Search & install
+
+**2. Upload Temperature Code:**
+- Open `ARDUINO_NANO/temp_sensor/temp_sensor.ino` in Arduino IDE
+- **Tools → Board → Arduino Nano**
+- **Tools → Processor → ATmega328P** (or Old Bootloader)
+- **Tools → Port → COM# / /dev/ttyUSB#**
+- Click **Upload** (→)
+- Edit: `#define CABIN_ID 0` (set your cabin number 0-9)
+
+**3. Connect to Raspberry Pi:**
+```bash
+# Check Arduino appears
+ls -l /dev/ttyUSB0
+
+# Set permissions
+sudo chmod 666 /dev/ttyUSB0
+```
+
+**4. Test:**
+```bash
+# Watch temperature updates
+cat /dev/ttyUSB0
+# Should show: TEMP 0 23 (updates every 10 sec)
+```
+
+---
+
+**Option B: Raspberry Pi Pico (MicroPython)**
 
 **1. Install MicroPython on Pico:**
 - Download: https://micropython.org/download/rp2-pico/
@@ -228,9 +268,18 @@ cat /dev/ttyACM0
 # Should show: TEMP 0 23 (updates every 10 sec)
 ```
 
-**That's it!** The RTOS automatically listens to `/dev/ttyACM0` and updates temperatures.
+**That's it!** The RTOS automatically listens to `/dev/ttyUSB0` (Arduino) or `/dev/ttyACM0` (Pico) and updates temperatures.
 
-**LED Status on Pico:**
+**LED Status:**
+
+**Arduino Nano:**
+- 3 blinks = Startup OK ✅
+- 1 blink = Reading temp 📖
+- 2 blinks = Sending data 📤
+- 5 rapid blinks = HIGH TEMP EMERGENCY ⚠️
+- Solid ON = Sensor error ❌
+
+**Raspberry Pi Pico:**
 - 3 blinks = Startup OK ✅
 - 1 blink = Reading temp 📖
 - 2 blinks = Sending data 📤
@@ -238,16 +287,25 @@ cat /dev/ttyACM0
 - Solid ON = Sensor error ❌
 
 **🔥 Automatic High Temperature Detection:**
-- **Threshold**: 45°C (configurable in `HIGH_TEMP_THRESHOLD`)
+- **Threshold**: 45°C (configurable)
 - **Action**: Automatically sends `EMERGENCY` command to RTOS
 - **Alert Rate**: Every 3 seconds while temperature exceeds threshold
-- **Recovery**: Auto-clears when temperature returns below threshold
+- **Recovery**: Auto-clears alerts when temperature returns below threshold
 - **Safety Feature**: Provides continuous alerts without manual intervention
 
 **📖 Full Guides:**
+
+**Arduino Nano** (Recommended):
+- Quick Start: `ARDUINO_NANO/QUICKSTART.md` (10 minutes)
+- Complete Setup: `ARDUINO_NANO/ARDUINO_SETUP.md` (all details)
+- Circuit Details: `ARDUINO_NANO/WIRING_DIAGRAM.txt` (ASCII diagrams)
+
+**Raspberry Pi Pico** (Alternative):
 - Quick Start: `RASPBERRY_PI_PICO/QUICKSTART.md`
 - Circuit Details: `RASPBERRY_PI_PICO/WIRING_DIAGRAM.txt` 
 - Integration: `TEMPERATURE_SENSOR_INTEGRATION.md`
+
+**Both Options**: `HIGH_TEMP_EMERGENCY.md` (emergency system documentation)
 
 ---
 
